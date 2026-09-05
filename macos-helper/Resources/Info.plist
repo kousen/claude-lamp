@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>com.kousenit.moonside-agent-lamp</string>
+  <key>CFBundleName</key><string>Moonside Agent Lamp</string>
+  <key>CFBundleExecutable</key><string>MoonsideAgentLamp</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleVersion</key><string>2</string>
+  <key>CFBundleShortVersionString</key><string>1.0.1</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSUIElement</key><true/>
+  <key>NSBluetoothAlwaysUsageDescription</key>
+  <string>Connect to your Moonside Halo lamp to show Claude and Codex working, approval, and completion colors.</string>
+  <key>NSHighResolutionCapable</key><true/>
+</dict></plist>

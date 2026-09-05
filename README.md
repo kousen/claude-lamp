@@ -1,5 +1,17 @@
 # Claude Lamp
 
+## Native macOS helper (Claude + Codex)
+
+The new [Moonside Agent Lamp](macos-helper/README.md) menu-bar app replaces the
+Python/Bleak runtime with a native CoreBluetooth connection, its own Bluetooth
+permission, and optional login startup. It preserves the enhanced installed
+Claude/Codex colors. Build, installation, tests, and reversible hook migration
+are documented there. The instructions below describe the legacy Python version.
+
+This fork extends [Bobby Bobak's original Claude Lamp](https://github.com/bobek-balinek/claude-lamp).
+Its MIT license is preserved. See [Lessons learned](LESSONS_LEARNED.md) for the
+Bluetooth permission diagnosis and design decisions behind the native helper.
+
 Control your [Moonside](https://moonside.design) LED lamp via BLE based on Claude Code's state. Your lamp becomes a physical status indicator — animated themes while Claude works, green when idle, purple when it needs your input.
 
 > **WARNING** Author takes no responsibility for the hardware issues that may arise from using this script. You run these scripts at your own risk.

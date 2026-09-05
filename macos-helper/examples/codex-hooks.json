@@ -1,0 +1,72 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/Library/Application Support/Moonside Agent Lamp/moonside_hook.sh\" idle",
+            "timeout": 5
+          }
+        ],
+        "matcher": "startup|resume|clear"
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/Library/Application Support/Moonside Agent Lamp/moonside_hook.sh\" codex-working",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/Library/Application Support/Moonside Agent Lamp/moonside_hook.sh\" codex-working",
+            "timeout": 5
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/Library/Application Support/Moonside Agent Lamp/moonside_hook.sh\" codex-input",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/Library/Application Support/Moonside Agent Lamp/moonside_hook.sh\" codex-done",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/Library/Application Support/Moonside Agent Lamp/moonside_hook.sh\" off",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}
