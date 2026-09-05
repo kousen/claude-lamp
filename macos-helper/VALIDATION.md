@@ -61,7 +61,7 @@ hardware retest below for updated results.
 
 The user reported completing the update/build/install, executable comparison,
 six-color menu test, completion-to-off check, and physical unplug/replug test on
-September 5, 2026. They had not yet run separate short tasks in both agents.
+September 5, 2026. Separate live agent checks were subsequently completed below.
 
 - Independently compared the installed executable with the repository build:
   they match. The checkout is at recovery-refactor commit `6647ff5`.
@@ -75,10 +75,12 @@ September 5, 2026. They had not yet run separate short tasks in both agents.
   authorization granted and login startup enabled.
 - The user's follow-up Codex prompt served as the live Codex task check:
   `codex-working` / cyan was logged at 18:39:43 UTC, followed by the approval/input
-  event. Completion from that still-running task was not yet available at the time
-  this record was written; completion itself passed the menu test above.
+  event. Subsequent live Codex completion sequences were observed at 18:41:39
+  and 18:42:05 UTC, each displaying white then returning to off three seconds later.
+- The user subsequently ran a Claude task and confirmed the lamp feedback worked.
+  The helper log corroborates Claude's `working` state and blue color at 18:42:35
+  UTC. This is a user-confirmed live task check, not just the earlier menu test.
 
-Still pending: a separate live Claude task on the refactored build, actual OS
-sleep/wake and logout/login, Bluetooth off/on via system settings, macOS 13
+Still pending: actual OS sleep/wake and logout/login, Bluetooth off/on via system settings, macOS 13
 execution, and Intel hardware. Automated simulations cover the relevant recovery
 policy but are not claimed as substitutes for these physical/platform checks.
