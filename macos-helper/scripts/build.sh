@@ -5,7 +5,7 @@ cd "$helper_root"
 mkdir -p .build/direct
 target="$(uname -m)-apple-macosx13.0"
 swiftc -target "$target" -swift-version 5 -O -emit-library -static -emit-module -module-name LampCore \
-  Sources/LampCore/State.swift -o .build/direct/libLampCore.a \
+  Sources/LampCore/*.swift -o .build/direct/libLampCore.a \
   -emit-module-path .build/direct/LampCore.swiftmodule
 swiftc -target "$target" -swift-version 5 -O -I .build/direct -L .build/direct -lLampCore \
   Sources/MoonsideAgentLamp/main.swift -o .build/direct/MoonsideAgentLamp

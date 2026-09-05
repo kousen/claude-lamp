@@ -37,3 +37,24 @@
 Not yet exercised: actual logout/login, system sleep/wake, physical unplug/replug,
 Bluetooth off/on, older-macOS execution, or Intel hardware.
 The state/retry logic covers these cases, but hardware behavior is not claimed tested.
+
+## Automated recovery coverage added September 5, 2026
+
+- Extracted connection policy and write serialization into `LampCore/Recovery.swift`
+  and wired the actual macOS app to those components. This is a production refactor,
+  not a separate simulated copy of the app's recovery rules.
+- Six existing test groups and 15 new recovery tests pass. The recovery tests use
+  supplied timestamps and injected outcomes, with no hardware, real timers, or sleeps.
+- Covered discovery/connection/service deadlines, disconnect/retry and backoff reset,
+  unavailable/denied/re-enabled Bluetooth, revocation during a write, interrupted
+  writes and timeouts, latest-state precedence, stale write acknowledgements,
+  sleep/retry cancellation, pause persistence, post-wake display expiry, and quit.
+- Hook-example checks, shell syntax checks, macOS app compilation, signature
+  verification, and executable minimum-OS verification (13.0) pass.
+- The updated source no longer schedules delayed write callbacks to drain commands;
+  its queue owns pacing and invalidates old write IDs on disconnect. Discovery
+  callbacks are gated by the active connection phase and sleep/permission state.
+- This refactored build has **not** replaced the installed app or been physically
+  retested. Earlier hardware results above apply to the previously installed build.
+  Actual logout/login, OS sleep/wake, hardware disconnect/reconnect, and platform
+  compatibility still require live verification; simulated tests do not replace them.

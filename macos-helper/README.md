@@ -142,6 +142,23 @@ No prompts, code, or transcripts are stored. Backups live in `backups/`.
 
 ## Acceptance checks
 
+`bash scripts/test.sh` runs six state/palette test groups and 15 deterministic
+recovery tests, plus hook-example and shell syntax validation. The app and tests
+share `LampCore/Recovery.swift`: connection phases/deadlines, retry policy,
+permission/power/pause/sleep gates, and a serialized write queue. Tests supply
+timestamps directly and inject connection outcomes; no Bluetooth hardware, TCC
+permission prompt, real sleep, or waiting is involved.
+
+Recovery coverage includes permission denial and later grant, revocation during
+a write, Bluetooth off/on, disconnect/retry, connection/discovery timeouts,
+interrupted writes, write timeouts, superseded colors, stale acknowledgement IDs,
+sleep cancellation, pause surviving wake, expiration of old display state, and quit
+during a pending write. These validate the shared policy/queue and their composition
+with the state machine. They do not emulate CoreBluetooth itself or prove the macOS
+delegate adapter receives each event correctly on every OS/device.
+
+The live checks below remain necessary after changes to the Bluetooth adapter:
+
 1. Open the installed .app through Finder; approve Bluetooth for its own identity.
 2. Connect the Halo and visually verify all six colors and the three-second flash.
 3. Quit and reopen; confirm no fresh permission prompt or Python crash report.

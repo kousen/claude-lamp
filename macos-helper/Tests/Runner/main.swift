@@ -21,6 +21,26 @@ tests.testRejectMalformedStaleFutureAndPrelaunchEvents()
 tests.testRepeatedWorkingRefreshesLeaseAndOldEventCannotWin()
 tests.testReconnectBackoffIsBoundedAndResettable()
 print("PASS: 6 test groups — palettes, completion races, replay, stale input, expiry, retry")
+let recoveryTests = RecoveryTests()
+let recoveryCases: [(String, () -> Void)] = [
+    ("unavailable Bluetooth", recoveryTests.testUnavailableBluetoothNeverSchedulesAccess),
+    ("permission granted", recoveryTests.testPermissionGrantedAfterDenialCanConnect),
+    ("connection deadlines", recoveryTests.testDiscoveryAndHandshakeDeadlines),
+    ("disconnect retry", recoveryTests.testDisconnectRetriesOnceAndSuccessResetsBackoff),
+    ("Bluetooth off/on", recoveryTests.testBluetoothOffCancelsPendingRetryAndRecovers),
+    ("sleep cancels retry", recoveryTests.testSleepCancelsRetryAndLateDiscovery),
+    ("pause survives wake", recoveryTests.testPausePersistsAcrossSleepAndBluetoothToggle),
+    ("serialized writes", recoveryTests.testWritesAreSerializedAndPaced),
+    ("new state wins", recoveryTests.testNewStateSupersedesInFlightColorSequence),
+    ("late acknowledgement", recoveryTests.testLateAcknowledgementCannotReleaseNewConnectionWrite),
+    ("write timeout", recoveryTests.testWriteTimeoutDropsOldCommandsAndRetriesLatestState),
+    ("permission revoked during write", recoveryTests.testPermissionRevokedDuringWriteStopsRetries),
+    ("interrupted write error", recoveryTests.testInterruptedWriteErrorRestartsWholeLatestSequence),
+    ("wake state expiry", recoveryTests.testWakeExpiresOldCompletionButPreservesRecentWork),
+    ("quit during write", recoveryTests.testQuitPreemptsColorAndNeverRetries)
+]
+for (name, run) in recoveryCases { run(); print("PASS: \(name)") }
+print("PASS: \(recoveryCases.count) recovery tests")
 for path in CommandLine.arguments.dropFirst() {
     let json = try JSONSerialization.jsonObject(with: Data(contentsOf: URL(fileURLWithPath: path)))
     guard let root = json as? [String: Any], let hooks = root["hooks"] as? [String: [[String: Any]]] else {

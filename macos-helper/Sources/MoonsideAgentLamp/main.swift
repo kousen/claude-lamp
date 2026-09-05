@@ -21,22 +21,17 @@ final class LampApp: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
     private var pauseItem: NSMenuItem!
     private var loginItem: NSMenuItem!
     private var timer: Timer?
-    private var reconnectTask: DispatchWorkItem?
-    private var operationDeadline: Date?
-    private var writeDeadline: Date?
-    private var writePending = false
-    private var commands: [String] = []
+    private var recovery = ConnectionRecovery()
+    private var writes = LampWriteQueue()
     private var machine = StateMachine()
-    private var backoff = Backoff()
     private var started = Date().timeIntervalSince1970
-    private var paused = false
-    private var sleeping = false
+    private var paused: Bool { recovery.paused }
+    private var sleeping: Bool { recovery.sleeping }
     private var lockFD: Int32 = -1
     private var ownsLock = false
     private var connection = "Starting"
     private var lastCommand = ""
     private var quitting = false
-    private var eventVersion = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do {
@@ -124,7 +119,8 @@ final class LampApp: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
     }
 
     private func poll() {
-        guard !quitting else { return }
+        // Finish a queued LEDOFF even during the short graceful-quit window.
+        guard !quitting else { sendNext(); return }
         let now = Date().timeIntervalSince1970
         if let data = try? Data(contentsOf: root.appendingPathComponent("event")), data.count <= 512,
            let text = String(data: data, encoding: .utf8),
@@ -132,78 +128,73 @@ final class LampApp: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
             if machine.accept(event, now: now) { applyState() }
         }
         if machine.tick(now: now) { applyState() }
-        if let deadline = operationDeadline, Date() >= deadline { failConnection("Connection/discovery timed out") }
-        if let deadline = writeDeadline, Date() >= deadline { failConnection("Lamp write timed out") }
+        if recovery.timedOut(now: now) { failConnection("Connection/discovery timed out") }
+        if writes.timedOut(now: now) { failConnection("Lamp write timed out") }
+        if recovery.retryDue(now: now) { scan() }
+        sendNext()
     }
 
     private func applyState() {
-        eventVersion += 1
         stateLine.title = machine.state.displayName
         log("State: \(machine.state.rawValue)")
         if characteristic != nil && !paused && !sleeping {
-            commands = machine.state.commands
-            if !writePending { sendNext() }
+            writes.replace(with: machine.state.commands)
+            sendNext()
         }
         snapshot()
     }
 
     private func sendNext() {
-        guard !writePending, !commands.isEmpty, let p = peripheral, p.state == .connected,
-              let c = characteristic else { return }
-        let command = commands.removeFirst()
+        guard let p = peripheral, p.state == .connected, let c = characteristic,
+              let write = writes.next(now: Date().timeIntervalSince1970) else { return }
+        let command = write.command
         lastCommand = command; log("TX \(command)")
-        writePending = true; writeDeadline = Date().addingTimeInterval(5)
         p.writeValue(Data(command.utf8), for: c, type: .withResponse)
         snapshot()
     }
 
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
-        guard peripheral == self.peripheral else { return }
-        writeDeadline = nil
+        guard peripheral == self.peripheral, characteristic === self.characteristic,
+              let active = writes.active else { return }
         if let error { failConnection("Write failed: \(error.localizedDescription)"); return }
-        let version = eventVersion
-        // Space commands, and never let a delayed old color overwrite a newer event.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { [weak self] in
-            guard let self, self.peripheral == peripheral else { return }
-            self.writePending = false
-            if version != self.eventVersion { self.commands = self.machine.state.commands }
-            self.sendNext()
-        }
+        writes.acknowledge(active.id, now: Date().timeIntervalSince1970)
     }
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         switch central.state {
-        case .poweredOn: if !paused && !sleeping { scan() }
-        case .unauthorized: clearConnection(); report("Bluetooth permission needed — open Settings")
-        case .poweredOff: clearConnection(); report("Bluetooth is off")
-        case .unsupported: clearConnection(); report("Bluetooth unavailable")
-        default: clearConnection(); report("Waiting for Bluetooth")
+        case .poweredOn: recovery.setAvailability(.poweredOn); scan()
+        case .unauthorized:
+            recovery.setAvailability(.unauthorized); clearConnection(); report("Bluetooth permission needed — open Settings")
+        case .poweredOff:
+            recovery.setAvailability(.poweredOff); clearConnection(); report("Bluetooth is off")
+        case .unsupported:
+            recovery.setAvailability(.unsupported); clearConnection(); report("Bluetooth unavailable")
+        default:
+            recovery.setAvailability(.unknown); clearConnection(); report("Waiting for Bluetooth")
         }
     }
 
     private func scan() {
-        guard !paused, !sleeping, central.state == .poweredOn, peripheral == nil else { return }
-        reconnectTask?.cancel(); reconnectTask = nil
+        guard peripheral == nil, recovery.beginScan(now: Date().timeIntervalSince1970) else { return }
         report("Looking for Halo…")
         // Existing Halo firmware is discovered by advertised name; NUS may not be in its advertisement.
         central.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: false])
-        operationDeadline = Date().addingTimeInterval(10)
     }
 
     func centralManager(_ central: CBCentralManager, didDiscover p: CBPeripheral,
                         advertisementData: [String: Any], rssi RSSI: NSNumber) {
-        guard peripheral == nil, !paused else { return }
+        guard peripheral == nil, recovery.canConnect else { return }
         let name = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? p.name ?? ""
         guard name.uppercased().hasPrefix("MOONSIDE") else { return }
         if let pinned = UserDefaults.standard.string(forKey: "lampUUID"), pinned != p.identifier.uuidString { return }
+        guard recovery.discovered(now: Date().timeIntervalSince1970) else { return }
         central.stopScan(); peripheral = p; p.delegate = self
-        report("Connecting to \(name)…"); operationDeadline = Date().addingTimeInterval(15)
+        report("Connecting to \(name)…")
         central.connect(p)
     }
 
     func centralManager(_ central: CBCentralManager, didConnect p: CBPeripheral) {
-        guard p == peripheral else { return }
-        operationDeadline = Date().addingTimeInterval(10)
+        guard p == peripheral, recovery.connected(now: Date().timeIntervalSince1970) else { return }
         p.discoverServices([serviceID])
     }
 
@@ -219,7 +210,8 @@ final class LampApp: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
         guard p == peripheral else { return }
         guard error == nil, let c = service.characteristics?.first(where: { $0.uuid == writeID }),
               c.properties.contains(.write) else { failConnection("Moonside write characteristic unavailable"); return }
-        characteristic = c; operationDeadline = nil; backoff.reset()
+        guard recovery.ready() else { return }
+        characteristic = c
         UserDefaults.standard.set(p.identifier.uuidString, forKey: "lampUUID")
         report("Connected to \(p.name ?? "Halo")")
         _ = machine.tick(now: Date().timeIntervalSince1970)
@@ -234,35 +226,34 @@ final class LampApp: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
     }
 
     private func clearConnection() {
-        reconnectTask?.cancel(); reconnectTask = nil
+        recovery.clear()
         central?.stopScan()
         let old = peripheral
-        peripheral = nil; characteristic = nil; commands = []; writePending = false
-        writeDeadline = nil; operationDeadline = nil
+        peripheral = nil; characteristic = nil; writes.clear()
         if let old { central.cancelPeripheralConnection(old) }
     }
 
     private func failConnection(_ reason: String) {
         clearConnection()
-        guard !paused, !sleeping, central.state == .poweredOn else { return }
-        let delay = backoff.next()
+        guard let delay = recovery.failed(now: Date().timeIntervalSince1970) else { return }
         report("\(reason); retry in \(Int(delay))s")
-        let task = DispatchWorkItem { [weak self] in self?.scan() }
-        reconnectTask = task
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: task)
     }
 
     @objc private func reconnect() {
-        paused = false; pauseItem.title = "Pause & Disconnect"; backoff.reset()
+        recovery.setPaused(false); pauseItem.title = "Pause & Disconnect"; recovery.resetBackoff()
         clearConnection(); scan()
     }
     @objc private func togglePause() {
-        paused.toggle()
+        recovery.setPaused(!paused)
         pauseItem.title = paused ? "Resume" : "Pause & Disconnect"
         if paused { clearConnection(); report("Paused — lamp released for phone app") } else { scan() }
     }
-    @objc private func willSleep() { sleeping = true; clearConnection(); report("Sleeping") }
-    @objc private func didWake() { sleeping = false; backoff.reset(); _ = machine.tick(now: Date().timeIntervalSince1970); scan() }
+    @objc private func willSleep() { recovery.setSleeping(true); clearConnection(); report("Sleeping") }
+    @objc private func didWake() {
+        recovery.setSleeping(false)
+        if machine.tick(now: Date().timeIntervalSince1970) { applyState() }
+        scan()
+    }
     @objc private func testColor(_ sender: NSMenuItem) {
         guard let state = sender.representedObject as? String else { return }
         let now = Date().timeIntervalSince1970
@@ -292,14 +283,14 @@ final class LampApp: NSObject, NSApplicationDelegate, CBCentralManagerDelegate, 
     @objc private func quit() { NSApp.terminate(nil) }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard ownsLock, characteristic != nil, !quitting else { return .terminateNow }
-        quitting = true; commands = ["LEDOFF"]
-        if !writePending { sendNext() }
+        quitting = true; recovery.stop(); writes.replace(with: ["LEDOFF"])
+        sendNext()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { sender.reply(toApplicationShouldTerminate: true) }
         return .terminateLater
     }
     func applicationWillTerminate(_ notification: Notification) {
         guard ownsLock else { return }
-        quitting = true; timer?.invalidate(); clearConnection()
+        quitting = true; recovery.stop(); timer?.invalidate(); clearConnection()
         log("Helper stopped; hook events cannot launch Bluetooth")
         try? FileManager.default.removeItem(at: root.appendingPathComponent("status.json"))
         if lockFD >= 0 { close(lockFD) }
