@@ -34,9 +34,9 @@
 - Added fresh Claude/Codex configuration examples, upstream attribution, and
   lessons learned. Generated app bundles and compiler output remain ignored by Git.
 
-Not yet exercised: actual logout/login, system sleep/wake, physical unplug/replug,
-Bluetooth off/on, older-macOS execution, or Intel hardware.
-The state/retry logic covers these cases, but hardware behavior is not claimed tested.
+At this stage, logout/login, sleep/wake, physical unplug/replug, Bluetooth off/on,
+older-macOS execution, and Intel hardware had not been exercised. See the later
+hardware retest below for updated results.
 
 ## Automated recovery coverage added September 5, 2026
 
@@ -54,7 +54,31 @@ The state/retry logic covers these cases, but hardware behavior is not claimed t
 - The updated source no longer schedules delayed write callbacks to drain commands;
   its queue owns pacing and invalidates old write IDs on disconnect. Discovery
   callbacks are gated by the active connection phase and sleep/permission state.
-- This refactored build has **not** replaced the installed app or been physically
-  retested. Earlier hardware results above apply to the previously installed build.
-  Actual logout/login, OS sleep/wake, hardware disconnect/reconnect, and platform
-  compatibility still require live verification; simulated tests do not replace them.
+- At the time these tests were added, the refactored build had not replaced the
+  installed app. The following hardware retest subsequently exercised that build.
+
+## Hardware retest of recovery refactor (6647ff5)
+
+The user reported completing the update/build/install, executable comparison,
+six-color menu test, completion-to-off check, and physical unplug/replug test on
+September 5, 2026. They had not yet run separate short tasks in both agents.
+
+- Independently compared the installed executable with the repository build:
+  they match. The checkout is at recovery-refactor commit `6647ff5`.
+- Helper log shows restart at 18:37:17 UTC and connection at 18:37:20 UTC.
+- All six color command sequences and completion-to-off transitions appear in
+  the log between 18:37:50 and 18:38:19 UTC, corroborating the user's visual test.
+- Physical disconnect was recorded at 18:38:43 UTC. The helper retried with
+  increasing delays and reconnected automatically at 18:39:12 UTC (29 seconds
+  after detection; this includes time the lamp was unplugged).
+- Post-reconnect amber/white tests returned to off. The helper reported Bluetooth
+  authorization granted and login startup enabled.
+- The user's follow-up Codex prompt served as the live Codex task check:
+  `codex-working` / cyan was logged at 18:39:43 UTC, followed by the approval/input
+  event. Completion from that still-running task was not yet available at the time
+  this record was written; completion itself passed the menu test above.
+
+Still pending: a separate live Claude task on the refactored build, actual OS
+sleep/wake and logout/login, Bluetooth off/on via system settings, macOS 13
+execution, and Intel hardware. Automated simulations cover the relevant recovery
+policy but are not claimed as substitutes for these physical/platform checks.
